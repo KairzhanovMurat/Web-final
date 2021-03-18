@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Продукты</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BmbxuPwQa2lc/FVzBcNJ7UAyJxM6wuqIj61tLrc4wSX0szH/Ev+nYRRuWlolflfl" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/js/bootstrap.bundle.min.js" integrity="sha384-b5kHyXgcpbZJO/tY9Ul7kGkf1S0CWuKcCD38l8YkeH8z8QjE0GmW1gYU5S9FOnJ0" crossorigin="anonymous"></script>
+    <style>
+        .block-filter {
+            border: 1px solid rgba(0,0,0,.125);
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+    </style>
+    <script>
+        const isAuth = window.sessionStorage.getItem('auth')
+        if(!isAuth) {
+            alert('Вы не авторизованы!')
+            window.location.replace('./authorization.html')
+        }
+    </script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+          <a class="navbar-brand" href="#">Online Store</a>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+              <li class="nav-item">
+                <a class="nav-link active" aria-current="page" href="./admin.html">Home</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" href="./products.html">Products</a>
+              </li>
+            </ul>
+            <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                <form class="d-flex" onsubmit="setSearchText(); return false">
+                    <input class="form-control me-2" id="searchQuery" type="search" placeholder="Product search" aria-label="Search">
+                    <button class="btn btn-outline-warning" type="submit">Search</button>
+                </form>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                      Language
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+                      <li><a class="dropdown-item" href="#ru">Russian</a></li>
+                      <li><a class="dropdown-item" href="#en">English</a></li>
+                    </ul>
+                  </li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="./authorization.html">Login</a>
+                  </li>
+                  <button class="btn btn-outline-warning" type="button" onclick="logout()">Выйти</button>  
+            </ul>   
+          </div>
+        </div>
+      </nav>
+    <div class="container pt-4">
+        <div class="row">
+          <div class="col-sm" id="filters">
+            <div class="block-filter">
+                <h5>Категории</h5>
+                <div id="categoryFilters"></div>
+            </div>
+            <div class="block-filter">
+                <h5>Подкатегории</h5>
+                <div id="subcategoryFilters"></div>
+            </div>
+          </div>
+          <div class="col-sm">
+              <div id="products" class="d-flex flex-wrap"></div>
+              <button type="button" class="btn btn-primary" onclick="getProductsFromPaginator()" id="buttonPaginator">Еще</button>
+          </div>
+        </div>
+      </div>
+      <script>
+            // Урл для запросов
+            const baseUrl = 'https://my-json-server.typicode.com/Murat667/fakejs'
+            // Текущая страница по пагинации по получению продуктов
+            let currentPage = 1;
+            // Лимит объектов получаемых с пагинации
+            const limitProducts = 2;
+            // Словари
+            let products = [],          // Продукты
+                categories = [],        // Категории
+                subcategories = [],     // Подкатегории
+                searchText = '';
+
+            // Выбранный параметр
+            let changeCategorie = '',
+                changeSubCategorie = '';
+            // Язык
+            let language = window.location.hash.replace('#', '') ? window.location.hash.replace('#', '') : 'ru'
+
+            // Феч запрос на получений продуктов
+            async function getProducts() {
+                let urlFetch = `${baseUrl}/products?_page=${currentPage}&_limit=${limitProducts}`
+                if(changeCategorie || changeCategorie === '0') {
+                    urlFetch += `&categoryId=${changeCategorie}`
+                }
+                if(changeSubCategorie || changeSubCategorie === '0') {
+                    urlFetch += `&subcategoryId=${changeSubCategorie}`
+                }
+                if(searchText) {
+                    urlFetch += `&q=${searchText}`
+                }
+                const response = await fetch(urlFetch)
+                return await response.json()
+            }
+
+            // Феч запрос на получений категорий
+            async function getCategories() {
+                const response = await fetch(`${baseUrl}/categories`)
+                return await response.json()
+            }
+
+            // Феч запрос на получений подкатегорий
+            async function getSubcategories() {
+                const response = await fetch(`${baseUrl}/subcategories`)
+                return await response.json()
+            }
+
+            // Генератор HTML карточки
+            function generateArticleProduct(image, title, description, price, id) {
+                // Обращаюсь к родителю всех карточек
+                const productsParent = document.getElementById('products');
+                // Создаю пустую карточку
+                let article = document.createElement('article');
+
+                // Добавляю классы по стилизации бутстрапа
+                article.className += 'card me-auto mb-4'
+                // Добавляю кастомные стили
+                article.style.width = '18rem'
+                // Записываю в элемент HTML контент карточки
+                article.innerHTML = `
+                    <img src="${image}" style="max-height: 200px; width: 100%; object-fit: cover; object-position: top;" alt="...">
+                    <div class="card-body">
+                        <h5 class="card-title">${ title }</h5>
+                        <p class="card-text">${ description }</p>
+                        <p class="card-text"><b>${ price }</b></p>
+                        <a href="./product.html?id=${ id }" class="btn btn-primary">Открыть</a>
+                    </div>
+                `;
+
+                // Добавляение карточки в конец родителя
+                productsParent.append(article)
+            }
+
+            // Генератор HTML радио кнопки
+            function generateRadioButton(title, selector, name, index, id) {
+                // Обращаюсь к родителю всех радио кнопок
+                const radiobuttonsParent = document.getElementById(selector);
+                // Создаю пустой контейнер
+                let container = document.createElement('div');
+
+                // Добавляю бутстрап класс
+                container.classList.add('form-check')
+
+                // Записываю в элемент HTML контент контейнера
+                container.innerHTML = `
+                    <input class="form-check-input" type="radio" name="${ name }" id="${ name }${ index }" value="${id}" onclick="setFilterSelect('${name}')">
+                    <label class="form-check-label" for="${ name }${ index }">
+                        ${ title }
+                    </label>
+                `;
+
+                // Добавляение карточки в конец родителя
+                radiobuttonsParent.append(container)
+            }
+
+            // Уставка нового языка и смена контента в карточках
+            function setNewLanguage() {
+                language = window.location.hash.replace('#', '')
+
+
+                // Обращаюсь к родителю всех карточек
+                const productsParent = document.getElementById('products');
+                // Очищаю родитель
+                productsParent.innerHTML = '';
+                // Перезаписываю с новым языком
+                products.forEach(product => {
+                    generateArticleProduct(product.image, product[`title_${language}`], product[`desc_${language}`], product.price, product.id)
+                })
+
+
+                // Обращаюсь к родителю всех категорий
+                const categoriesParent = document.getElementById('categoryFilters');
+                // Очищаю родитель
+                categoriesParent.innerHTML = '';
+                // Перезаписываю с новым языком
+                categories.forEach((categorie, index) => {
+                    generateRadioButton(categorie[`title_${language}`], 'categoryFilters', 'categoryFilter', index)
+                })
+
+                // Обращаюсь к родителю всех подкатегорий
+                const subcategoriesParent = document.getElementById('subcategoryFilters');
+                // Очищаю родитель
+                subcategoriesParent.innerHTML = '';
+                // Перезаписываю с новым языком
+                subcategories.forEach((subcategorie, index) => {
+                    generateRadioButton(subcategorie[`title_${language}`], 'subcategoryFilters', 'subcategoryFilter', index)
+                })
+            }
+
+            // Получение данных через кнопку пагинатора
+            async function getProductsFromPaginator(){
+                currentPage++
+                const response = await getProducts()
+                
+                if(response.length) {
+                    // Запись в массив продуктов и рендер в HTML
+                    products.forEach(product => {
+                        generateArticleProduct(product.image, product[`title_${language}`], product[`desc_${language}`], product.price, product.id)
+                    })
+                } else {
+                    document.getElementById('buttonPaginator').style.display = 'none'
+                }
+
+            }
+
+            // Самовызывающая функция
+            (async function() {
+                
+                // Запрос продуктов
+                currentPage = 1
+                products = await getProducts();
+
+                // Запрос словарей для фильтрации
+                // Категорий
+                categories = await getCategories();
+                categories.forEach((categorie, index) => {
+                    generateRadioButton(categorie[`title_${language}`], 'categoryFilters', 'categoryFilter', index, categorie.id  )
+                })
+                //Подкатегорий
+                subcategories = await getSubcategories();
+                subcategories.forEach((subcategorie, index) => {
+                    generateRadioButton(subcategorie[`title_${language}`], 'subcategoryFilters', 'subcategoryFilter', index, subcategorie.id  )
+                })
+
+                // Запись в массив продуктов и рендер в HTML
+                products.forEach(product => {
+                    generateArticleProduct(product.image, product[`title_${language}`], product[`desc_${language}`], product.price, product.id)
+                })
+            })()
+
+            // Установка языка идет хэш в урле, потому я за урлом слежу
+            window.onhashchange = function() {
+                setNewLanguage()
+            }
+            
+
+            // Обработка выбранного радиобаттона
+            async function setFilterSelect(name) {
+                // Обращаюсь к родителю радиобаттонов
+                listRadioButtons = await document.getElementsByName(`${name}`);
+                // Прохожусь по радиобаттонам
+                for (const rb of listRadioButtons) {
+                    if (rb.checked) {
+                        if(name === 'categoryFilter') {
+                            changeCategorie = rb.value
+                        } else if(name === 'subcategoryFilter'){
+                            changeSubCategorie = rb.value
+                        }
+                        
+                        // Обращаюсь к родителю всех карточек
+                        const productsParent = document.getElementById('products');
+                        // Очищаю родитель
+                        productsParent.innerHTML = '';
+                        // Возвращаю дефолтное значение страницы
+                        currentPage = 1
+                        // Перезаписываю продукты
+                        products = await getProducts();
+                        products.forEach(product => {
+                            generateArticleProduct(product.image, product[`title_${language}`], product[`desc_${language}`], product.price, product.id)
+                        })
+                        // Возвращяю кнопку пагинатора
+                        document.getElementById('buttonPaginator').style.display = 'block'
+                    }
+                }
+            }
+
+            // Уставновка текста для поиска
+            async function setSearchText() {
+                searchText = document.getElementById('searchQuery').value
+                // Обращаюсь к родителю всех карточек
+                const productsParent = document.getElementById('products');
+                // Очищаю родитель
+                productsParent.innerHTML = '';
+                // Возвращаю дефолтное значение страницы
+                currentPage = 1
+                // Перезаписываю продукты
+                products = await getProducts();
+                products.forEach(product => {
+                    generateArticleProduct(product.image, product[`title_${language}`], product[`desc_${language}`], product.price, product.id)
+                })
+                // Возвращяю кнопку пагинатора
+                document.getElementById('buttonPaginator').style.display = 'block'
+                
+                return false
+            }
+
+            // Выход
+            function logout() {
+                window.sessionStorage.removeItem('auth');
+                window.sessionStorage.removeItem('role');
+                window.location.replace('./authorization.html')
+            }
+      </script>
+</body>
+</html>
